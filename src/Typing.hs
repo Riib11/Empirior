@@ -156,7 +156,7 @@ typeFormula = \case
 typePreciseFormula :: PreciseFormula -> TypeState ()
 typePreciseFormula = \case
   FormulaExpression e -> void $ matchTypeStates (typeExpression e) (return TypeBoolean)
-  FormulaOperation o p q -> typePreciseFormula p >> typePreciseFormula q
+  FormulaOperation o p q -> typeFormula p >> typeFormula q
   FormulaPredication n es  ->
     typeName n >>= \case
       TypePredicate ts -> do

@@ -16,7 +16,9 @@ prgm = Program $ Sequence
 
 main :: IO ()
 main = do
-  print $ execState (typeProgram prgm) (fromList [])
   putStrLn ""
-  putStrLn $ replicate 20 '='
-  putStrLn "[*] type checked"
+  print prgm
+  -- print $ execState (typeProgram prgm) (fromList [])
+  -- putStrLn ""
+  -- putStrLn $ replicate 20 '='
+  -- putStrLn "[*] type checked"
