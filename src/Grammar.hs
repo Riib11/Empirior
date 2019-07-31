@@ -2,116 +2,189 @@
 
 module Grammar where
 
-import           Control.Lens
+import           Control.Lens hiding (Fold)
 import           Data.List
-import           Data.Natural
 
 {-
-  # Program
+  # Imperiror Grammar
+-}
+
+{-
+  ## Program
 -}
 
 newtype Program = Program Statement
+
+{-
+  ### Show Instances
+-}
 
 instance Show Program where
   show (Program s) = unlines ["Begin Program", show s, "End Program"]
 
 {-
-  # Statement
+  ## Statement
 -}
 
-data Statement = Function    Name [(Name, Type)] Type Formula Formula Statement
-               | Predicate   Name [(Name, Type)] Formula
-               | Assert      Formula
-               | IfThenElse  Expression Statement Statement
-               | WhileLoop   Expression Formula Statement
-               | Declaration Name Type
-               | Assignment  Name Expression
-               | Skip
-               | Return      Expression
-               | Sequence    [Statement]
+data Statement = StatementFunction    Function
+               | StatementPredicate   Predicate
+               | StatementAssert      Formula
+               | StatementIfThenElse  Expression Statement Statement
+               | StatementWhileLoop   Expression Formula Statement
+               | StatementFold        Name [(Name, Type)]
+               | StatementUnfold      Name [(Name, Type)]
+               | StatementDeclaration Name Type
+               | StatementAssignment  Name Expression
+               | StatementSkip
+               | StatementReturn      Expression
+               | StatementSequence    [Statement]
 
-instance Show Statement where
-  show =
-    let showArgs = intercalate ", ".map (\(n,t) -> n++":"++show t) in
-    \case
-      Function n as t p q s -> unwords
-                                [ "function", n, "("++showArgs as++")", "->", show t
-                                , "\n  requires", show p
-                                , "\n  ensures", show q
-                                , "\n{\n  "++(
-                                    case s of
-                                      Sequence ss -> intercalate ";\n  " $ map show ss
-                                      _           -> show s
-                                    )++"\n}" ]
-      Predicate n as p      -> unwords
-                                [ "predicate", n, "("++showArgs as++")", ":=", show p ]
-      Assert p              -> unwords ["assert", show p]
-      IfThenElse e s s'     -> unwords
-                                ["if", "("++show e++")", "then", "{", show s, "}"
-                                , "else", "{", show s', "}"]
-      WhileLoop e p s       -> unwords
-                                ["while", "("++show e++")", "invariant", "(", show p, ")"
-                                , "{", show s, "}"]
-      Declaration n t       -> unwords [n, ":", show t]
-      Assignment n e        -> unwords [n, ":=", show e]
-      Skip                  -> unwords ["skip"]
-      Return e              -> unwords ["return", show e]
-      Sequence ss           -> intercalate ";\n" $ map show ss
+data Function = Function Name [(Name, Type)] Type Formula Formula Statement
+
+data Predicate = Predicate Name [(Name, Type)] Formula
 
 {-
-  # Formula
+  ### Show Instances
 -}
 
-data Formula = FormulaPrecise   PreciseFormula
-             | FormulaImprecise PreciseFormula
+instance Show Statement where
+  show = \case
+    StatementFunction fun -> show fun
+    StatementPredicate pre -> show pre
+    StatementAssert p -> unwords
+      ["assert", show p]
+    StatementIfThenElse e s s' -> unwords
+      ["if", "("++show e++")", "then", "{", show s, "}"
+      , "else", "{", show s', "}"]
+    StatementWhileLoop e p s -> unwords
+      ["while", "("++show e++")", "invariant", "(", show p, ")"
+      , "{", show s, "}"]
+    StatementFold n as -> unwords
+      ["fold", n, "("++showArgs as++")"]
+    StatementUnfold n as -> unwords
+      ["unfold", n, "("++showArgs as++")"]
+    StatementDeclaration n t -> unwords
+      [n, ":", show t]
+    StatementAssignment n e -> unwords
+      [n, ":=", show e]
+    StatementSkip ->
+      unwords ["skip"]
+    StatementReturn e ->
+      unwords ["return", show e]
+    StatementSequence ss ->
+      intercalate ";\n" $ map show ss
+
+instance Show Function where
+  show (Function n as t p q s) = unwords
+    [ "function"
+    , n++
+        (case as of [] -> ""
+                    _  -> " ("++showParams as++")")
+    , "->", show t
+    , "\n  requires", show p
+    , "\n  ensures", show q
+    , "\n{\n  "++
+        (case s of StatementSequence ss -> intercalate ";\n  " $ map show ss
+                   _                    -> show s)
+      ++"\n}" ]
+
+instance Show Predicate where
+  show (Predicate n as p) = unwords
+    [ "predicate", n, "("++showParams as++")", ":=", show p ]
+
+showParams :: Show a => [(Name, a)] -> String
+showParams = intercalate ", ".map (\(n,t) -> n++":"++show t)
+
+{-
+  ## Formula
+-}
+
+data Formula = Formula Precision PreciseFormula
+
+data Precision = Precise | Imprecise deriving (Show)
+
+{-
+  ### Show Instances
+-}
 
 instance Show Formula where
-  show = \case
-    FormulaPrecise p   -> show p
-    FormulaImprecise p -> unwords ["?", show And, show p]
+  show (Formula g p) = case g of
+    Precise   -> show p
+    Imprecise -> unwords ["?", show FormulaAnd, show p]
 
 {-
   ## Precise Formula
 -}
 
 data PreciseFormula = FormulaExpression  Expression
-                    | FormulaOperation   FormulaOperator Formula Formula
+                    | FormulaNegation    PreciseFormula
+                    | FormulaOperation   FormulaOperator [PreciseFormula]
                     | FormulaPredication Name [Expression]
-                    | FormulaIfThenElse  Expression Formula Formula
+                    | FormulaIfThenElse  Expression PreciseFormula PreciseFormula
+                    | FormulaUnfoldingIn Name [Expression] PreciseFormula
+
+data FormulaOperator = FormulaAnd | FormulaOr
+
+{-
+  ### Show Instances
+-}
 
 instance Show PreciseFormula where
-  show =
-    let showArgs = intercalate ", ".map show in
-    \case
-      FormulaExpression e     -> show e
-      FormulaOperation o p q  -> unwords ["("++show p, show o, show q++")"]
-      FormulaPredication n es -> unwords [n, "("++showArgs es++")"]
-      FormulaIfThenElse e p q -> unwords [ "if", show e
-                                         , "then", show p
-                                         , "else", show q ]
+  show = \case
+    FormulaExpression e       -> show e
+    FormulaNegation p         -> unwords ["~", show p]
+    FormulaOperation o ps     -> unwords ["("++intercalate (show o) (map show ps)++")"]
+    FormulaPredication n es   -> unwords [n, "("++showArgs es++")"]
+    FormulaIfThenElse e p q   -> unwords ["if", show e, "then", show p, "else", show q]
+    FormulaUnfoldingIn n es p -> unwords [ "unfolding", n, "("++showArgs es++")"
+                                         , "in", show p]
 
-data FormulaOperator = And | Or
+showArgs :: Show a => [a] -> String
+showArgs = intercalate ", ".map show
 
 instance Show FormulaOperator where
   show = \case
-    And -> "/\\"
-    Or  -> "\\/"
+    FormulaAnd -> "/\\"
+    FormulaOr  -> "\\/"
 {-
-  # Expression
+  ## Expression
 -}
 
 data Expression = ExpressionValue       Value
                 | ExpressionVariable    Name
+                | ExpressionOperation   ExpressionOperator [Expression]
                 | ExpressionApplication Name [Expression]
                 deriving (Eq, Ord)
 
+data ExpressionOperator = ExpressionAdd | ExpressionSub | ExpressionMul
+                        | ExpressionGt  | ExpressionGe  | ExpressionLt | ExpressionLe
+                        | ExpressionEq  | ExpressionNeq
+                        | ExpressionAnd | ExpressionOr
+  deriving (Eq, Ord)
+
+{-
+  ### Show Instances
+-}
+
 instance Show Expression where
-  show =
-    let showArgs = intercalate ", ".map show in
-    \case
-      ExpressionValue v          -> show v
-      ExpressionVariable x       -> x
-      ExpressionApplication n es -> unwords [n, "("++showArgs es++")"]
+  show = \case
+    ExpressionValue v          -> show v
+    ExpressionVariable x       -> x
+    ExpressionApplication n es -> unwords [n, "("++showArgs es++")"]
+
+instance Show ExpressionOperator where
+  show = \case
+    ExpressionAdd -> "+"
+    ExpressionSub -> "-"
+    ExpressionMul -> "*"
+    ExpressionEq  -> "="
+    ExpressionNeq -> "!="
+    ExpressionGt  -> ">"
+    ExpressionGe  -> ">="
+    ExpressionLt  -> "<"
+    ExpressionLe  -> "<="
+    ExpressionAnd -> "&&"
+    ExpressionOr  -> "||"
 
 {-
   ## Value
@@ -119,38 +192,106 @@ instance Show Expression where
 
 data Value = ValueUnit
            | ValueBoolean Bool
-           | ValueNatural Natural
+           | ValueInteger Integer
            deriving (Eq, Ord)
+
+{-
+  ### Show Instances
+-}
 
 instance Show Value where
   show = \case
     ValueUnit -> "()"
     ValueBoolean b -> if b then "true" else "false"
-    ValueNatural n -> show n
+    ValueInteger i -> show i
 
 {-
-  # Type
+  ## Type
 -}
 
 data Type = TypeVoid
           | TypeUnit
           | TypeBoolean
-          | TypeNatural
+          | TypeInteger
           | TypeFunction  [Type] Type
           | TypePredicate [Type]
           deriving (Eq, Ord)
+
+{-
+  ### Show Instances
+-}
 
 instance Show Type where
   show = \case
     TypeVoid          -> "Void"
     TypeUnit          -> "Unit"
     TypeBoolean       -> "Boolean"
-    TypeNatural       -> "Natural"
-    TypeFunction ts t -> unwords ["("++intercalate " -> " (map show ts)++")", show t]
-
+    TypeInteger       -> "Integer"
+    TypeFunction ts t -> unwords ["("++showArgs ts++")", "->", show t]
 
 {-
-  # Name
+  ## Name
 -}
 
 type Name = String
+
+{-
+  # Utility Functions
+-}
+
+{-
+  ## Constructor Abbreviations
+-}
+
+formulaBool  = FormulaExpression . ExpressionValue . ValueBoolean
+formulaTrue  = formulaBool True
+formulaFalse = formulaBool False
+
+expressionInteger = ExpressionValue . ValueInteger
+expressionBoolean = ExpressionValue . ValueBoolean
+expressionTrue = expressionBoolean True
+expressionFalse = expressionBoolean False
+
+formulaOperation :: FormulaOperator -> [Formula] -> Formula
+formulaOperation o ps = Formula (meetPrecisions $ map precision ps) $
+                          FormulaOperation o (map precise ps)
+
+{-
+  ## Precision
+-}
+
+precise :: Formula -> PreciseFormula
+precise (Formula _ p) = p
+
+precision :: Formula -> Precision
+precision (Formula h _) = h
+
+meetPrecision :: Precision -> Precision -> Precision
+meetPrecision h g = case (h,g) of
+  (Precise, Precise) -> Precise
+  _                  -> Imprecise
+
+meetPrecisions :: [Precision] -> Precision
+meetPrecisions = foldl meetPrecision Precise
+
+{-
+  ## Substitution
+-}
+
+substituteFormula :: Expression -> Name -> Formula -> Formula
+substituteFormula e y (Formula h p) =
+  let substitutePreciseFormula :: PreciseFormula -> PreciseFormula
+      substitutePreciseFormula = \case
+        FormulaExpression  e     -> FormulaExpression $ substituteExpression e
+        FormulaOperation   o ps  -> FormulaOperation o (map substitutePreciseFormula ps)
+        FormulaPredication n es  -> FormulaPredication n $ map substituteExpression es
+        FormulaIfThenElse  e p q -> FormulaIfThenElse (substituteExpression e)
+                                                      (substitutePreciseFormula p)
+                                                      (substitutePreciseFormula q)
+      substituteExpression = \case
+        ExpressionValue v          -> ExpressionValue v
+        ExpressionVariable x       -> if x == y then e else ExpressionVariable x
+        ExpressionApplication n es -> ExpressionApplication n $
+                                      map substituteExpression es
+  in
+  Formula h (substitutePreciseFormula p)

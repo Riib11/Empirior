@@ -1,71 +1,41 @@
-{-# LANGUAGE LambdaCase #-}
-
 module WeakestPrecondition where
 
-import           Control.Lens
+import           Control.Lens hiding (Fold)
 
 import           Grammar
 
-formulaBool = FormulaPrecise . FormulaExpression . ExpressionValue . ValueBoolean
-
+-- TODO: move this to Verification module, so that can access VerificationContext (needs access to evaluations for implication, functions, predicates, etc)
 weakestPrecondition :: Statement -> Formula -> Formula
 weakestPrecondition s wp = case s of
-  Function n args t p q s -> error "TODO"
+  StatementFunction (Function n as t p q s) -> wp
 
-  Predicate n args p -> error "TODO"
+  StatementPredicate (Predicate n as p) -> wp
 
-  Assert p -> conjunct p wp
+  StatementAssert p -> formulaOperation FormulaAnd [p, wp]
 
-  IfThenElse e s s' -> conjuncts
-    [ FormulaPrecise $ FormulaIfThenElse
-        e (weakestPrecondition s wp) (weakestPrecondition s' wp)
-    , wp ]
+  StatementIfThenElse e s s' ->
+    let p = weakestPrecondition s wp
+        q = weakestPrecondition s' wp in
+    formulaOperation FormulaAnd
+      [ Formula Precise $ FormulaIfThenElse e (precise p) (precise q), wp ]
 
-  WhileLoop e p s -> conjuncts
-    [ FormulaPrecise $ FormulaExpression e
-    , FormulaPrecise $ FormulaIfThenElse
-        e (weakestPrecondition s (conjunct p wp)) (formulaBool True)
-    , wp ]
+  StatementWhileLoop e p s ->
+    let q = weakestPrecondition s (formulaOperation FormulaAnd [p, wp]) in
+    formulaOperation FormulaAnd
+      [ Formula Precise $ FormulaExpression e
+      , Formula (precision q) $ FormulaIfThenElse e (precise q) (formulaBool True)
+      , wp ]
 
-  Declaration n t -> wp
+  StatementFold n as -> error "TODO"
 
-  Assignment n e -> substituteFormula e n wp
+  StatementUnfold n as -> error "TODO"
 
-  Skip -> wp
+  StatementDeclaration n t -> wp
 
-  Return e -> substituteFormula e "result" wp
+  StatementAssignment n e -> substituteFormula e n wp
 
-  Sequence (s:ss) -> weakestPrecondition s $ weakestPrecondition (Sequence ss) wp
-  Sequence []     -> formulaBool True
+  StatementSkip -> wp
 
-conjunct :: Formula -> Formula -> Formula
-conjunct p q = case (p, q) of
-  (FormulaPrecise   _, FormulaPrecise   _) -> FormulaPrecise   (FormulaOperation And p q)
-  (FormulaPrecise   _, FormulaImprecise _) -> FormulaImprecise (FormulaOperation And p q)
-  (FormulaImprecise _, FormulaPrecise   _) -> FormulaImprecise (FormulaOperation And p q)
-  (FormulaImprecise _, FormulaImprecise _) -> FormulaImprecise (FormulaOperation And p q)
+  StatementReturn e -> substituteFormula e "result" wp
 
-conjuncts :: [Formula] -> Formula
-conjuncts = \case
-  []     -> formulaBool True
-  [p]    -> p
-  (p:ps) -> foldl conjunct p ps
-
-substituteFormula :: Expression -> Name -> Formula -> Formula
-substituteFormula e y =
-  let substitutePreciseFormula = \case
-        FormulaExpression  e     -> FormulaExpression $ substituteExpression e
-        FormulaOperation   o p q -> FormulaOperation o (substituteFormula e y p)
-                                                       (substituteFormula e y q)
-        FormulaPredication n es  -> FormulaPredication n $ map substituteExpression es
-        FormulaIfThenElse  e p q -> FormulaIfThenElse (substituteExpression e)
-                                                      (substituteFormula e y p)
-                                                      (substituteFormula e y q)
-      substituteExpression = \case
-        ExpressionValue v          -> ExpressionValue v
-        ExpressionVariable x       -> if x == y then e else ExpressionVariable x
-        ExpressionApplication n es -> ExpressionApplication n $
-                                      map substituteExpression es
-  in \case
-    FormulaPrecise   p -> FormulaPrecise   $ substitutePreciseFormula p
-    FormulaImprecise p -> FormulaImprecise $ substitutePreciseFormula p
+  StatementSequence ss -> foldr weakestPrecondition wp ss

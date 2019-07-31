@@ -9,33 +9,9 @@ import           Data.Map            hiding (map)
 import           Prelude
 import           System.IO.Unsafe
 
+import           Context
 import           Debug
 import           Grammar
-
-{-
-  # Type Context
--}
-
-type TypeContext = Map Expression Type
-
-{-
-  # Type Checking
--}
-
-type TypeState a = State TypeContext a
-
-typeSubTypeState :: TypeState a -> TypeState ()
-typeSubTypeState s = void.return.execState s =<< get
-
-{-
-  ## Type Judgements
--}
-
-judge :: Expression -> Type -> TypeState Type
-judge e t = modify (insert e t) >> return t
-
-typeOf :: Expression -> TypeState Type
-typeOf e = gets (!e)
 
 {-
   ## Type Checks
@@ -44,13 +20,8 @@ typeOf e = gets (!e)
 mismatch :: Type -> Type -> a
 mismatch t t' = error $ "type mismatch: "++show (t,t')
 
-matchTypes :: Type -> Type -> TypeState Type
-matchTypes t t' = if t == t' then return t else mismatch t t'
-
-matchTypeStates :: TypeState Type -> TypeState Type -> TypeState Type
-matchTypeStates s s' = do
-  t <- s ; t' <- s'
-  matchTypes t t'
+matchedTypes :: Type -> Type -> ProgramState Type
+matchedTypes t t' = if t == t' then return t else mismatch t t'
 
 {-
   ## Typing
@@ -60,116 +31,104 @@ matchTypeStates s s' = do
   ### Typing Programs
 -}
 
-typeProgram :: Program -> TypeState ()
+typeProgram :: Program -> ProgramState ()
 typeProgram (Program stmt) = void $ typeStatement stmt
 
 {-
   ### Typing Statements
 -}
 
-typeStatement :: Statement -> TypeState Type
+typeStatement :: Statement -> ProgramState Type
 typeStatement = \case
-  Function n args t p q s -> do
-    typeSubTypeState $ do
+  StatementFunction (Function n args t p q s) -> do
+    evalSubState $ do
       typeArguments args
       typeFormula p
       typeFormula q
-      matchTypeStates (typeStatement s) (return t)
-    ExpressionVariable n `judge` TypeFunction (map snd args) t
+      t' <- typeStatement s
+      return $! debug . show $ t'
+      matchedTypes t t'
+    n `declare` TypeFunction (map snd args) t
+    declarationOf n
 
-  Predicate n args p -> do
-    typeSubTypeState $ do
+  StatementPredicate (Predicate n args p) -> do
+    evalSubState $ do
       typeArguments args
       typeFormula p
-    ExpressionVariable n `judge` TypePredicate (map snd args)
+    n `declare` TypePredicate (map snd args)
+    declarationOf n
 
-  Assert p -> do
+  StatementAssert p -> do
     typeFormula p
     return TypeUnit
 
-  IfThenElse e s s' -> do
-    void $ matchTypeStates (typeExpression e) (return TypeBoolean)
-    t <- typeStatement s ; t' <- typeStatement s'
-    matchTypes t t'
+  StatementIfThenElse e s s' -> do
+    void $ typeExpression e >>= matchedTypes TypeBoolean
+    t  <- typeStatement s
+    t' <- typeStatement s'
+    matchedTypes t t'
 
-  WhileLoop e p s -> do
-    void $ matchTypeStates (typeExpression e) (return TypeBoolean)
+  StatementWhileLoop e p s -> do
+    t <- typeExpression e
+    void $ matchedTypes t TypeBoolean
     void $ typeFormula p
     typeStatement s
 
-  Declaration n t -> do
-    ExpressionVariable n `judge` t
+  StatementDeclaration n t -> do
+    n `declare` t
     return TypeUnit
 
-  Assignment n e -> do
-    t  <- typeName n
+  StatementAssignment n e -> do
+    t  <- typeExpression (ExpressionVariable n)
     t' <- typeExpression e
-    return.debug.show $ (t,t')
-    matchTypes t t'
+    return.debug.show $ (t, t')
+    matchedTypes t t'
     return TypeUnit
-    -- matchTypeStates (typeName n) (typeExpression e)
 
-  Skip -> return TypeUnit
+  StatementSkip -> return TypeUnit
 
-  Return e -> typeExpression e
+  StatementReturn e -> typeExpression e
 
-  Sequence []     -> return TypeUnit
-  Sequence [s]    -> typeStatement s
-  Sequence (s:ss) -> do
-    matchTypeStates (typeStatement s) (return TypeUnit)
-    typeStatement $ Sequence ss
+  StatementSequence ss -> foldM (\_ s -> typeStatement s) TypeUnit ss
 
-typeArguments :: [(Name, Type)] -> TypeState ()
-typeArguments = void.traverse (\(x,t) -> ExpressionVariable x `judge` t)
+typeArguments :: [(Name, Type)] -> ProgramState ()
+typeArguments = void.traverse (uncurry declare)
 
 {-
   ### Typing Arguments
 -}
 
-typeExpression :: Expression -> TypeState Type
+typeExpression :: Expression -> ProgramState Type
 typeExpression = \case
-  ExpressionValue    v -> typeValue v
-  ExpressionVariable n -> typeName n
+  ExpressionValue v          -> typeValue v
+  ExpressionVariable n       -> declarationOf n
   ExpressionApplication n es ->
-    typeName n >>= \case
+    typeExpression (ExpressionVariable n) >>= \case
       TypeFunction ts t -> do
-        ts' <- traverse typeExpression es
-        void.traverse (uncurry matchTypes) $ zip ts ts'
+        traverse typeExpression es >>= void.traverse (uncurry matchedTypes) . zip ts
         return t
       _ -> error $ "non-function application: "++show (ExpressionApplication n es)
 
-typeValue :: Value -> TypeState Type
+typeValue :: Value -> ProgramState Type
 typeValue = \case
   ValueUnit      -> return TypeUnit
   ValueBoolean _ -> return TypeBoolean
-  ValueNatural _ -> return TypeNatural
+  ValueInteger _ -> return TypeInteger
 
 {-
   ### Typing Formulas
 -}
 
-typeFormula :: Formula -> TypeState ()
-typeFormula = \case
-  FormulaPrecise   p -> typePreciseFormula   p
-  FormulaImprecise p -> typeImpreciseFormula p
+typeFormula :: Formula -> ProgramState ()
+typeFormula (Formula g p) = typePreciseFormula p
 
-typePreciseFormula :: PreciseFormula -> TypeState ()
+typePreciseFormula :: PreciseFormula -> ProgramState ()
 typePreciseFormula = \case
-  FormulaExpression e -> void $ matchTypeStates (typeExpression e) (return TypeBoolean)
-  FormulaOperation o p q -> typeFormula p >> typeFormula q
-  FormulaPredication n es  ->
-    typeName n >>= \case
-      TypePredicate ts -> do
-        ts' <- traverse typeExpression es
-        void.traverse (uncurry matchTypes) $ zip ts ts'
+  FormulaExpression e -> void $ typeExpression e >>= matchedTypes TypeBoolean
+  FormulaNegation p -> typePreciseFormula p
+  FormulaOperation o ps -> void $ traverse typePreciseFormula ps
+  FormulaPredication n es ->
+    typeExpression (ExpressionVariable n) >>= \case
+      TypePredicate ts -> traverse typeExpression es
+                            >>= void . traverse (uncurry matchedTypes) . zip ts
       _ -> error $ "non-predicate predication: "++show (FormulaPredication n es)
-
-typeImpreciseFormula :: PreciseFormula -> TypeState ()
-typeImpreciseFormula = typePreciseFormula
-
-{-
-  ### Typing Names
--}
-
-typeName :: Name -> TypeState Type
-typeName = typeOf.ExpressionVariable
