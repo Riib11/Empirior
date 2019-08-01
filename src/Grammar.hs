@@ -201,7 +201,7 @@ data Value = ValueUnit
 
 instance Show Value where
   show = \case
-    ValueUnit -> "()"
+    ValueUnit -> "unit"
     ValueBoolean b -> if b then "true" else "false"
     ValueInteger i -> show i
 
@@ -227,8 +227,7 @@ instance Show Type where
     TypeUnit          -> "Unit"
     TypeBoolean       -> "Boolean"
     TypeInteger       -> "Integer"
-    TypeFunction ts t -> case ts of [] -> unwords ["->", show t]
-                                    _  -> unwords ["("++showArgs ts++")", "->", show t]
+    TypeFunction ts t -> unwords ["("++showArgs ts++")", "->", show t]
 
 {-
   ## Name
