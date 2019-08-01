@@ -14,48 +14,45 @@ import           Debug
 import           Grammar
 
 {-
-  ## Type Checks
--}
+  # Typing
 
-mismatch :: Type -> Type -> a
-mismatch t t' = error $ "type mismatch: "++show (t,t')
+  Construct the type of the appropriate parts of program:
+  - function applications use correct argument types
+  - predications use correct argument types
+  - predicate-expressions yield booleans
+  - assignments have matching declared and expression type
+  -
 
-matchedTypes :: Type -> Type -> ProgramState Type
-matchedTypes t t' = if t == t' then return t else mismatch t t'
-
-{-
-  ## Typing
--}
-
-{-
-  ### Typing Programs
 -}
 
 typeProgram :: Program -> ProgramState ()
-typeProgram (Program stmt) = void $ typeStatement stmt
+typeProgram (Program stmt) = do
+  void $ typeStatement stmt
+  unlessErred $ comment "top"
+    "Typing Successful"
+    "There were no errors during typing."
 
 {-
-  ### Typing Statements
+  ## Typing Statements
 -}
 
 typeStatement :: Statement -> ProgramState Type
 typeStatement = \case
-  StatementFunction (Function n args t p q s) -> do
+  StatementFunction (Function n as t p q s) -> do
     evalSubState $ do
-      typeArguments args
+      traverse (uncurry declare) as
       typeFormula p
       typeFormula q
       t' <- typeStatement s
-      return $! debug . show $ t'
       matchedTypes t t'
-    n `declare` TypeFunction (map snd args) t
+    n `declare` TypeFunction (map snd as) t
     declarationOf n
 
-  StatementPredicate (Predicate n args p) -> do
+  StatementPredicate (Predicate n as p) -> do
     evalSubState $ do
-      typeArguments args
+      traverse (uncurry declare) as
       typeFormula p
-    n `declare` TypePredicate (map snd args)
+    n `declare` TypePredicate (map snd as)
     declarationOf n
 
   StatementAssert p -> do
@@ -69,8 +66,7 @@ typeStatement = \case
     matchedTypes t t'
 
   StatementWhileLoop e p s -> do
-    t <- typeExpression e
-    void $ matchedTypes t TypeBoolean
+    void $ typeExpression e >>= matchedTypes TypeBoolean
     void $ typeFormula p
     typeStatement s
 
@@ -81,7 +77,6 @@ typeStatement = \case
   StatementAssignment n e -> do
     t  <- typeExpression (ExpressionVariable n)
     t' <- typeExpression e
-    return.debug.show $ (t, t')
     matchedTypes t t'
     return TypeUnit
 
@@ -89,13 +84,10 @@ typeStatement = \case
 
   StatementReturn e -> typeExpression e
 
-  StatementSequence ss -> foldM (\_ s -> typeStatement s) TypeUnit ss
-
-typeArguments :: [(Name, Type)] -> ProgramState ()
-typeArguments = void.traverse (uncurry declare)
+  StatementSequence ss -> traverse typeStatement ss >> return TypeUnit
 
 {-
-  ### Typing Arguments
+  ## Typing Expressions
 -}
 
 typeExpression :: Expression -> ProgramState Type
@@ -116,7 +108,7 @@ typeValue = \case
   ValueInteger _ -> return TypeInteger
 
 {-
-  ### Typing Formulas
+  ## Typing Formulas
 -}
 
 typeFormula :: Formula -> ProgramState ()
@@ -132,3 +124,13 @@ typePreciseFormula = \case
       TypePredicate ts -> traverse typeExpression es
                             >>= void . traverse (uncurry matchedTypes) . zip ts
       _ -> error $ "non-predicate predication: "++show (FormulaPredication n es)
+
+{-
+  # Type Checks
+-}
+
+mismatch :: Type -> Type -> a
+mismatch t t' = error $ "type mismatch: "++show (t,t')
+
+matchedTypes :: Type -> Type -> ProgramState Type
+matchedTypes t t' = if t == t' then return t else mismatch t t'

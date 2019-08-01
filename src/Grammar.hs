@@ -31,8 +31,8 @@ data Statement = StatementFunction    Function
                | StatementAssert      Formula
                | StatementIfThenElse  Expression Statement Statement
                | StatementWhileLoop   Expression Formula Statement
-               | StatementFold        Name [(Name, Type)]
-               | StatementUnfold      Name [(Name, Type)]
+               | StatementFold        Name [Expression]
+               | StatementUnfold      Name [Expression]
                | StatementDeclaration Name Type
                | StatementAssignment  Name Expression
                | StatementSkip
@@ -227,7 +227,8 @@ instance Show Type where
     TypeUnit          -> "Unit"
     TypeBoolean       -> "Boolean"
     TypeInteger       -> "Integer"
-    TypeFunction ts t -> unwords ["("++showArgs ts++")", "->", show t]
+    TypeFunction ts t -> case ts of [] -> unwords ["->", show t]
+                                    _  -> unwords ["("++showArgs ts++")", "->", show t]
 
 {-
   ## Name

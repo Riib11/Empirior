@@ -1,13 +1,22 @@
+import           Control.Lens
 import           Control.Monad.State
 import           Data.Map
 
 import           Context
 import           Evaluation
 import           Grammar
+import           Interpretation
 import           Typing
+import           Verification
 
 prgm = Program $ StatementSequence
   [ StatementFunction $ Function "f" [("x",TypeBoolean)] TypeBoolean
+      (Formula Precise $ FormulaExpression $ ExpressionValue $ ValueBoolean True)
+      (Formula Precise $ FormulaExpression $ ExpressionValue $ ValueBoolean True)
+      (StatementSequence
+        [ StatementReturn (ExpressionValue $ ValueInteger 1)
+        ])
+  , StatementFunction $ Function "g" [] TypeBoolean
       (Formula Precise $ FormulaExpression $ ExpressionValue $ ValueBoolean True)
       (Formula Precise $ FormulaExpression $ ExpressionValue $ ValueBoolean True)
       (StatementSequence
@@ -25,10 +34,12 @@ form =
     -- ExpressionOperation ExpressionOr [exprBool True, exprBool True, exprBool False]
 
 main :: IO ()
-main = do
-  putStrLn ""
-  -- testFormulaSimplification
-  testTyping
+main = putStrLn "" >> print (execState test initProgramContext)
+
+test = do
+  interpretProgram prgm
+  typeProgram prgm
+  verifyProgram prgm
 
 -- testFormulaSimplification =
 --   let ctx = EvaluationContext
@@ -43,8 +54,3 @@ main = do
 --   in do
 --     putStrLn $ replicate 20 '='
 --     putStrLn $ show form++" ==> "++show form'
-
-testTyping = do
-  print $ execState (typeProgram prgm) initProgramContext
-  putStrLn $ replicate 20 '='
-  putStrLn "[*] type checked"
