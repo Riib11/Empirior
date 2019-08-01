@@ -13,31 +13,31 @@ A simple imperitive language supporting gradual Hoare-logical verification.
     | assert <formula>
     | if <expression> { <statement> } else { <statement> }
     | while <expression> { <statement> }
-    | fold <name> ( [<expression>] )
-    | unfold <name> ( [<expression>] )
-    | <name> : <type>
-    | <name> := <expression>
-    | skip
+    | fold <name> ( [<expression>] ) // fold predication
+    | unfold <name> ( [<expression>] ) // unfold predication
+    | <name> : <type> // variable declaration
+    | <name> := <expression> // variable assignment
     | return <expression>
     | <statement> ; <statement>
+    | skip
 
   <formula> ::=
-    | ? /\ <precise-formula>
+    | ? /\ <precise-formula> // imprecise formula
     | <precise-formula>
 
   <precise-formula> ::=
     | <expression>
-    | ~ <precise-formula>
+    | ~ <precise-formula> // negation
     | <precise-formula> <formula-operator> <precise-formula>
-    | <name> ( [<expression>] )
+    | <name> ( [<expression>] ) // predication
     | if <expression> then <precise-formula> else <precise-formula>
-    | unfolding <name> ( [<expression>] ) in <precise-formula>
+    | unfolding <name> ( [<expression>] ) in <precise-formula> // unfolding predication
 
   <formula-operator> ::= /\ | \/
 
   <expression> ::=
     | <value>
-    | <variable>
+    | <name> // variable
     | <expression> <expression-operator> <expression>
     | <name> ( [<expression>] )
 
