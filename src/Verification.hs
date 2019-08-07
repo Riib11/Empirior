@@ -3,13 +3,16 @@ module Verification where
 import           Control.Lens
 import           Control.Monad
 import           Control.Monad.State
-import           Data.Map            hiding (map)
+import           Data.Map
 import           Prelude
 import           System.IO.Unsafe
+
 
 import           Context
 import           Debug
 import           Grammar
+import           Implication
+import           WeakestPrecondition
 
 {-
   # Verification
@@ -23,21 +26,26 @@ import           Grammar
 
 verifyProgram :: Program -> ProgramState ()
 verifyProgram (Program s) = do
-  verifyStatement s
+  -- verify all functions in program
+  void $ traverse verifyFunction =<< uses functions elems
+  -- verify top-level program
+  isVerified <- (Formula Precise formulaTrue `implies`)
+                  =<< weakestPrecondition s (Formula Precise formulaTrue)
   unlessErred $ comment "top"
-    "Verification Successful"
+    "Program Verification Successful"
     "There were no errors during verification."
-
-{-
-  ## Verify Statement
--}
-
-verifyStatement :: Statement -> ProgramState ()
-verifyStatement s = error "TODO"
 
 {-
   ## Verify Function
 -}
 
 verifyFunction :: Function -> ProgramState ()
-verifyFunction = error "TODO"
+verifyFunction (Function n as t p q s) = do
+  isVerified <- (p `implies`) =<< weakestPrecondition s p
+  if isVerified
+    then comment ("function "++n)
+      (n++" Verification Successful")
+      "There were no errors during verification."
+    else err ("function "++n)
+      (n++"Verification Unsuccessful")
+      "There were some errors during verification."

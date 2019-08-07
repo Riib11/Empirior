@@ -1,8 +1,9 @@
 module Implication where
 
+import           Context
 import           Grammar
 
-implies :: Formula -> Formula -> Bool
+implies :: Formula -> Formula -> ProgramState Bool
 implies (Formula g p) (Formula h q) = case (g, h) of
   (Precise,   Precise)   -> impliesPrecise p q
   (Imprecise, Precise)   -> error "TODO: imprecise implication"
@@ -11,7 +12,7 @@ implies (Formula g p) (Formula h q) = case (g, h) of
 
 (==>) = implies
 
-impliesPrecise :: PreciseFormula -> PreciseFormula -> Bool
+impliesPrecise :: PreciseFormula -> PreciseFormula -> ProgramState Bool
 impliesPrecise p q = case p of
   FormulaExpression e -> case e of
     ExpressionValue v          -> error "TODO"

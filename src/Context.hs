@@ -72,9 +72,9 @@ instance Show Message where
 
 instance Show MessageCategory where
   show = \case
-    MessageError   -> "Error"
-    MessageWarning -> "Warning"
-    MessageComment -> "Comment"
+    MessageError   -> "[!] Error"
+    MessageWarning -> "[~] Warning"
+    MessageComment -> "[•] Comment"
 
 {-
   ## Program State
