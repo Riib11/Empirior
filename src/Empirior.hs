@@ -1,5 +1,14 @@
 module Empirior where
 
+import           Control.Monad.State
+
+import           Context
+import           Evaluation
+import           Grammar
+import           Interpretation
+import           Typing
+import           Verification
+
 {-
   # Empirior
 
@@ -8,3 +17,10 @@ module Empirior where
   3. Verify Program
   4. Evaluate Program
 -}
+
+run :: Program -> ProgramContext -> ProgramContext
+run prgm = execState $ do
+  interpretProgram prgm
+  typeProgram prgm
+  verifyProgram prgm
+  evaluateProgram prgm

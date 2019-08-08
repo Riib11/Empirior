@@ -1,5 +1,4 @@
-{-# LANGUAGE LambdaCase      #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Evaluation where
 
@@ -11,43 +10,23 @@ import           Data.Maybe
 import           Debug
 import           Prelude
 
+import           Context
 import           Grammar
 
-{-
-  # Evaluation Context
--}
-
-data EvaluationContext = EvaluationContext
-                          { _functions  :: Map Name Function
-                          , _predicates :: Map Name Predicate
-                          , _variables  :: Map Name Expression }
-                          deriving (Show)
-
-initEvaluationContext = EvaluationContext (fromList []) (fromList []) (fromList [])
-
-makeLenses ''EvaluationContext
-
-{-
-  # Evaluation State
--}
-
-type EvaluationState a = State EvaluationContext a
-
-evaluateSub :: EvaluationState a -> EvaluationState a
-evaluateSub s = evalState s <$> get
 
 {-
   # Evaluation
 -}
 
-evaluateProgram :: Program -> EvaluationState ()
-evaluateProgram (Program s) = evaluateStatement s
+evaluateProgram :: Program -> ProgramState ()
+evaluateProgram (Program s) = error "TODO"
+-- evaluateProgram (Program s) = evaluateStatement s
 
 {-
   ## Evaluate Statements
 -}
 
-evaluateStatement :: Statement -> EvaluationState ()
+evaluateStatement :: Statement -> ProgramState ()
 evaluateStatement = \case
   StatementFunction fun@(Function n _ _ _ _ _) -> functions . at n .= Just fun
 
@@ -63,28 +42,28 @@ evaluateStatement = \case
 
   StatementUnfold n as -> return ()
 
-  StatementDeclaration n t -> variables . at n .= (Just . error $ "undefined: "++n)
+  StatementDeclaration n t -> assignments . at n .= (Just . error $ "undefined: "++n)
 
-  StatementAssignment n e -> variables . ix n .= e
+  StatementAssignment n e -> assignments . ix n .= e
 
   StatementSkip -> return ()
 
-  StatementReturn e -> variables . ix "result" .= e
+  StatementReturn e -> assignments . ix "result" .= e
 
   StatementSequence ss -> void $ traverse evaluateStatement ss
 
-evaluateSubStatement :: Statement -> EvaluationState ()
-evaluateSubStatement = evaluateSub . evaluateStatement
+evaluateSubStatement :: Statement -> ProgramState ()
+evaluateSubStatement = evalSubState . evaluateStatement
 
 {-
   ## Evaluate Expressions
 -}
 
-evaluateExpression :: Expression -> EvaluationState Expression
+evaluateExpression :: Expression -> ProgramState Expression
 evaluateExpression = \case
   ExpressionValue v -> return $ ExpressionValue v
 
-  ExpressionVariable x -> uses variables (!x)
+  ExpressionVariable x -> uses assignments (!x)
 
   ExpressionOperation o es ->
     let
@@ -127,14 +106,14 @@ evaluateExpression = \case
 
   ExpressionApplication n es -> do
     (Function n as t p q s) <- uses functions (!n)
-    evaluateSub $ do
+    evalSubState $ do
       -- assign args
-      void . traverse (uncurry $ \x -> (variables . at x .=) . Just) $
+      void . traverse (uncurry $ \x -> (assignments . at x .=) . Just) $
         zip (map fst as) es
       -- assign old args
       -- TODO
       -- assign result to default
-      variables . at "result" .= (Just $ ExpressionValue ValueUnit)
+      assignments . at "result" .= (Just $ ExpressionValue ValueUnit)
       -- do dynamic checks from pre-condition
       -- TODO
       -- evaluate body
@@ -142,7 +121,7 @@ evaluateExpression = \case
       -- do dynamic checks from post-condition
       -- TODO
       -- evaluate to result
-      uses variables (!"result")
+      uses assignments (!"result")
 
 
 {-
@@ -154,7 +133,7 @@ evaluateExpression = \case
   - Evaluate each contained expression
 -}
 
-simplifyFormula :: Formula -> EvaluationState Formula
+simplifyFormula :: Formula -> ProgramState Formula
 simplifyFormula (Formula g p) = case p of
   FormulaExpression e -> evaluateExpression e >>= \case
     ExpressionOperation eo es ->
@@ -180,7 +159,7 @@ simplifyFormula (Formula g p) = case p of
   Convert a precise formula into set of disjunctions.
 -}
 
-normalizeFormula :: PreciseFormula -> EvaluationState PreciseFormula
+normalizeFormula :: PreciseFormula -> ProgramState PreciseFormula
 normalizeFormula = \case
   FormulaExpression e -> error "TODO"
 
