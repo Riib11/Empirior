@@ -29,8 +29,8 @@ verifyProgram (Program s) = do
   -- verify all functions in program
   void $ traverse verifyFunction =<< uses functions elems
   -- verify top-level program
-  isVerified <- (Formula Precise formulaTrue `implies`)
-                  =<< weakestPrecondition s (Formula Precise formulaTrue)
+  isVerified <- do wp <- weakestPrecondition s (Formula Precise formulaTrue)
+                   Formula Precise formulaTrue ==> wp
   unlessErred $ comment "top"
     "Program Verification Successful"
     "There were no errors during verification."
@@ -41,7 +41,8 @@ verifyProgram (Program s) = do
 
 verifyFunction :: Function -> ProgramState ()
 verifyFunction (Function n as t p q s) = do
-  isVerified <- (p `implies`) =<< weakestPrecondition s p
+  wp <- weakestPrecondition s p
+  isVerified <- p ==> wp
   if isVerified
     then comment ("function "++n)
       (n++" Verification Successful")

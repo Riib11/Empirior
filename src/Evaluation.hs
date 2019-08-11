@@ -19,8 +19,7 @@ import           Grammar
 -}
 
 evaluateProgram :: Program -> ProgramState ()
-evaluateProgram (Program s) = error "TODO"
--- evaluateProgram (Program s) = evaluateStatement s
+evaluateProgram (Program s) = evaluateStatement s
 
 {-
   ## Evaluate Statements

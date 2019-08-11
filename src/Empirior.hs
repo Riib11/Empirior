@@ -18,8 +18,8 @@ import           Verification
   4. Evaluate Program
 -}
 
-run :: Program -> ProgramContext -> ProgramContext
-run prgm = execState $ do
+run :: Program -> ProgramContext -> IO ProgramContext
+run prgm = execStateT $ do
   interpretProgram prgm
   typeProgram prgm
   verifyProgram prgm

@@ -5,8 +5,10 @@ module Context where
 
 import           Control.Lens
 import           Control.Monad
-import           Control.Monad.State
-import           Data.Map            as Map hiding (map)
+import           Control.Monad.Trans
+import           Control.Monad.Trans.State
+import           Data.Map                  as Map hiding (map)
+import           Z3.Base                   as Z3B
 
 import           Grammar
 
@@ -25,7 +27,9 @@ data ProgramContext = ProgramContext
                         , _predicates   :: Map Name Predicate
                         , _declarations :: Map Name Type
                         , _assignments  :: Map Name Expression
-                        , _messages     :: [Message] }
+                        , _messages     :: [Message]
+                        , z3Context     :: Z3B.Context
+                        , _z3Sorts      :: Map Name Z3B.Sort }
 
 data Message = Message
                 { category :: MessageCategory
@@ -38,9 +42,18 @@ data MessageCategory = MessageComment
                      | MessageError
                      deriving (Eq)
 
-initProgramContext :: ProgramContext
-initProgramContext = ProgramContext emap emap emap emap []
-  where emap = fromList []
+initProgramContext :: IO ProgramContext
+initProgramContext = do
+  let em = fromList []
+  zc <- Z3B.mkContext =<< Z3B.mkConfig
+  unitSort    <- Z3B.mkUninterpretedSort zc =<< Z3B.mkStringSymbol zc "Unit"
+  boolSort    <- Z3B.mkBoolSort zc
+  integerSort <- Z3B.mkIntSort zc
+  return $
+    ProgramContext em em em em [] zc
+      (fromList [ ("Unit", unitSort)
+                , ("Boolean", boolSort)
+                , ("Integer", integerSort) ])
 
 makeLenses ''Message
 makeLenses ''ProgramContext
@@ -80,13 +93,13 @@ instance Show MessageCategory where
   ## Program State
 -}
 
-type ProgramState a = State ProgramContext a
+type ProgramState a = StateT ProgramContext IO a
 
 evalSubState :: ProgramState a -> ProgramState a
-evalSubState ps = evalState ps <$> get
+evalSubState ps = lift . evalStateT ps =<< get
 
 execSubState :: ProgramState a -> ProgramState ()
-execSubState ps = void.return.execState ps =<< get
+execSubState ps = void . return . execStateT ps =<< get
 
 {-
   ## Utilities

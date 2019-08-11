@@ -279,19 +279,20 @@ meetPrecisions = foldl meetPrecision Precise
 -}
 
 substituteFormula :: Expression -> Name -> Formula -> Formula
-substituteFormula e y (Formula h p) =
-  let substitutePreciseFormula :: PreciseFormula -> PreciseFormula
-      substitutePreciseFormula = \case
-        FormulaExpression  e     -> FormulaExpression $ substituteExpression e
-        FormulaOperation   o ps  -> FormulaOperation o (map substitutePreciseFormula ps)
-        FormulaPredication n es  -> FormulaPredication n $ map substituteExpression es
-        FormulaIfThenElse  e p q -> FormulaIfThenElse (substituteExpression e)
-                                                      (substitutePreciseFormula p)
-                                                      (substitutePreciseFormula q)
-      substituteExpression = \case
-        ExpressionValue v          -> ExpressionValue v
-        ExpressionVariable x       -> if x == y then e else ExpressionVariable x
-        ExpressionApplication n es -> ExpressionApplication n $
-                                      map substituteExpression es
-  in
-  Formula h (substitutePreciseFormula p)
+substituteFormula f y (Formula h p) = Formula h (substitutePreciseFormula f y p)
+
+substitutePreciseFormula :: Expression -> Name -> PreciseFormula -> PreciseFormula
+substitutePreciseFormula f y = \case
+  FormulaExpression  e     -> FormulaExpression $ substituteExpression f y e
+  FormulaOperation   o ps  -> FormulaOperation o $ map (substitutePreciseFormula f y) ps
+  FormulaPredication n es  -> FormulaPredication n $ map (substituteExpression f y) es
+  FormulaIfThenElse  e p q -> FormulaIfThenElse (substituteExpression f y e)
+                                                (substitutePreciseFormula f y p)
+                                                (substitutePreciseFormula f y q)
+
+substituteExpression :: Expression -> Name -> Expression -> Expression
+substituteExpression f y = \case
+  ExpressionValue v          -> ExpressionValue v
+  ExpressionVariable x       -> if x == y then f else ExpressionVariable x
+  ExpressionApplication n es -> ExpressionApplication n $
+                                map (substituteExpression f y) es

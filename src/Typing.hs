@@ -5,7 +5,7 @@ module Typing where
 import           Control.Lens
 import           Control.Monad
 import           Control.Monad.State
-import           Data.Map            hiding (map)
+import           Data.Map            hiding (foldl, map)
 import           Prelude
 import           System.IO.Unsafe
 
@@ -44,7 +44,7 @@ typeStatement = \case
       typeFormula p
       typeFormula q
       t' <- typeStatement s
-      matchedTypes t t'
+      matchedTypes (Function n as t p q s) t t'
     n `declare` TypeFunction (map snd as) t
     declarationOf n
 
@@ -60,13 +60,13 @@ typeStatement = \case
     return TypeUnit
 
   StatementIfThenElse e s s' -> do
-    void $ typeExpression e >>= matchedTypes TypeBoolean
+    void $ typeExpression e >>= matchedTypes e TypeBoolean
     t  <- typeStatement s
     t' <- typeStatement s'
-    matchedTypes t t'
+    matchedTypes (s, s') t t'
 
   StatementWhileLoop e p s -> do
-    void $ typeExpression e >>= matchedTypes TypeBoolean
+    void $ typeExpression e >>= matchedTypes e TypeBoolean
     void $ typeFormula p
     typeStatement s
 
@@ -77,14 +77,16 @@ typeStatement = \case
   StatementAssignment n e -> do
     t  <- typeExpression (ExpressionVariable n)
     t' <- typeExpression e
-    matchedTypes t t'
+    matchedTypes (t, t') t t'
     return TypeUnit
 
   StatementSkip -> return TypeUnit
 
   StatementReturn e -> typeExpression e
 
-  StatementSequence ss -> traverse typeStatement ss >> return TypeUnit
+  StatementSequence ss -> foldl (\_ s -> typeStatement s) (return TypeUnit) ss
+
+  -- traverse typeStatement ss >> return TypeUnit
 
 {-
   ## Typing Expressions
@@ -97,7 +99,8 @@ typeExpression = \case
   ExpressionApplication n es ->
     typeExpression (ExpressionVariable n) >>= \case
       TypeFunction ts t -> do
-        traverse typeExpression es >>= void.traverse (uncurry matchedTypes) . zip ts
+        traverse typeExpression es
+          >>= void.traverse (\(t, t') -> matchedTypes (t, t') t t') . zip ts
         return t
       _ -> error $ "non-function application: "++show (ExpressionApplication n es)
 
@@ -116,21 +119,22 @@ typeFormula (Formula g p) = typePreciseFormula p
 
 typePreciseFormula :: PreciseFormula -> ProgramState ()
 typePreciseFormula = \case
-  FormulaExpression e -> void $ typeExpression e >>= matchedTypes TypeBoolean
+  FormulaExpression e -> void $ typeExpression e >>= matchedTypes e TypeBoolean
   FormulaNegation p -> typePreciseFormula p
   FormulaOperation o ps -> void $ traverse typePreciseFormula ps
   FormulaPredication n es ->
     typeExpression (ExpressionVariable n) >>= \case
       TypePredicate ts -> traverse typeExpression es
-                            >>= void . traverse (uncurry matchedTypes) . zip ts
+                            >>= void . traverse (\(t, t') -> matchedTypes (t, t') t t')
+                            . zip ts
       _ -> error $ "non-predicate predication: "++show (FormulaPredication n es)
 
 {-
   # Type Checks
 -}
 
-mismatch :: Type -> Type -> a
-mismatch t t' = error $ "type mismatch: "++show (t,t')
+mismatch :: Show a => a -> Type -> Type -> b
+mismatch a t t' = error $ "type mismatch of "++show (t, t')++" in: "++show a
 
-matchedTypes :: Type -> Type -> ProgramState Type
-matchedTypes t t' = if t == t' then return t else mismatch t t'
+matchedTypes :: Show a => a -> Type -> Type -> ProgramState Type
+matchedTypes a t t' = if t == t' then return t else mismatch a t t'

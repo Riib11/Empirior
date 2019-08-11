@@ -1,7 +1,13 @@
 module Implication where
 
+import           Control.Monad.Trans
+import           Control.Monad.Trans.State
+import           Z3.Base                   as Z3B
+
 import           Context
+import           Formula
 import           Grammar
+import           Z3Utilities
 
 implies :: Formula -> Formula -> ProgramState Bool
 implies (Formula g p) (Formula h q) = case (g, h) of
@@ -13,12 +19,18 @@ implies (Formula g p) (Formula h q) = case (g, h) of
 (==>) = implies
 
 impliesPrecise :: PreciseFormula -> PreciseFormula -> ProgramState Bool
-impliesPrecise p q = case p of
-  FormulaExpression e -> case e of
-    ExpressionValue v          -> error "TODO"
-    ExpressionVariable x       -> error "TODO"
-    ExpressionApplication n es -> error "TODO"
-  FormulaNegation p -> error "TODO"
-  FormulaOperation o os -> error "TODO"
-  FormulaPredication n es  -> error "TODO"
-  FormulaIfThenElse e p p' -> error "TODO"
+impliesPrecise p q = do
+  zc <- gets z3Context
+
+  sp <- symbolicPreciseFormula p
+  sq <- symbolicPreciseFormula q
+  imp <- lift $ mkImplies zc sp sq
+
+  sol <- lift $ mkSolver zc
+
+  lift $ solverAssertCnstr zc sol imp
+
+  res <- lift $ solverCheck zc sol
+  case res of
+    Sat -> return True
+    _   -> return False

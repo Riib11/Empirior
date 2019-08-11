@@ -20,11 +20,12 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/githubuser/Empirior#readme>
 
 dependencies:
-- base >=4 && <5
-- natural-numbers >=0.1 && <0.2
-- mtl >=2 && <3
-- lens >=4 && <5
+- base >=4.5 && <5
+- mtl ==2.*
+- lens ==4.*
 - containers >=0.5 && <0.6
+- transformers ==0.5.*
+- z3 ==408.0
 
 library:
   source-dirs: src
@@ -37,6 +38,7 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -dynamic
     dependencies:
     - Empirior
 
@@ -48,5 +50,6 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -dynamic
     dependencies:
     - Empirior

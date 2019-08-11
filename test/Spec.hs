@@ -14,32 +14,37 @@ prgm = Program $ StatementSequence
       (Formula Precise $ FormulaExpression $ ExpressionValue $ ValueBoolean True)
       (Formula Precise $ FormulaExpression $ ExpressionValue $ ValueBoolean True)
       (StatementSequence
-        [ StatementReturn (ExpressionValue $ ValueInteger 1)
+        [ StatementReturn (ExpressionValue $ ValueBoolean True)
         ])
   , StatementFunction $ Function "g" [] TypeBoolean
       (Formula Precise $ FormulaExpression $ ExpressionValue $ ValueBoolean True)
       (Formula Precise $ FormulaExpression $ ExpressionValue $ ValueBoolean True)
       (StatementSequence
-        [ StatementReturn (ExpressionValue $ ValueInteger 1)
+        [ StatementReturn (ExpressionValue $ ValueBoolean False)
         ])
+  , StatementAssert form
   ]
 
 form =
   let exprBool = ExpressionValue . ValueBoolean
       exprInt  = ExpressionValue . ValueInteger
   in
-  Formula Precise . FormulaExpression $
-    ExpressionApplication "f" []
+  Formula Precise . FormulaExpression $ ExpressionValue (ValueBoolean True)
+    -- ExpressionApplication "f" [exprInt 1]
     -- ExpressionOperation ExpressionAdd [exprInt 1, exprInt 2]
     -- ExpressionOperation ExpressionOr [exprBool True, exprBool True, exprBool False]
-
-main :: IO ()
-main = putStrLn "" >> print (execState test initProgramContext)
 
 test = do
   interpretProgram prgm
   typeProgram prgm
   verifyProgram prgm
+
+main :: IO ()
+main = do
+  putStrLn ""
+  s <- initProgramContext
+  s <- execStateT test s
+  print s
 
 -- testFormulaSimplification =
 --   let ctx = EvaluationContext

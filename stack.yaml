@@ -2,6 +2,6 @@ packages:
 - .
 
 extra-deps:
-- natural-numbers-0.1.2.0@sha256:0fcbe1220979b83fa612fca73a1adb1a99ff43c84f9652b3ff32b2323309b43c,1407
+- z3-408.0@sha256:89bbc2d828dc1fe1f19666e8e501c69ce5d0ed8026e4a02f7eae1e69f4a352af,4052
 
-resolver: lts-9.21
+resolver: lts-9.0
